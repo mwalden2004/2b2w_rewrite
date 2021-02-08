@@ -1,0 +1,145 @@
+<html>
+
+<head>
+    <title>2Bored2Wait</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/particlesjs/2.2.3/particles.min.js"></script>
+    <script>
+        window.onload = () => {
+            Particles.init({
+                selector: '.particles',
+                maxParticles: 450,
+                color: "#fff"
+            });
+        }
+    </script>
+</head>
+
+<body>
+
+    <canvas class="particles">
+    </canvas>
+
+
+    <div class="content">
+        <h1>
+            <center>Place in queue: <div class="place" id="place">None</div>
+            </center>
+        </h1>
+        <h1>
+            <center>ETA: <div class="ETA" id="ETA">None</div>
+            </center>
+        </h1>
+        <br>
+        <center>Webserver Password: </center>
+        <center><input type="password" class="password" id="password"></center>
+        <center style="margin-top: 5px;">(Leave blank if none)</center><br>
+        <center><button id="queueButton" class="start">Start queuing</button><br></center><br>
+    </div>
+    <script>
+        function request(url, method, headers, body, cb, retries) {
+            retries = retries || 0;
+            if (method == "GET") {
+                fetch(url, {
+                    method: method,
+                    headers: headers,
+                    credentials: "include"
+                }).then(async response => {
+                    if (response.status == 500) {
+                        setTimeout(function () {
+                            if (retries <= 15) {
+                                request(url, method, headers, body, cb, retries + 1)
+                            }
+                        }, 1000)
+                    } else {
+                        response.json().then(data => {
+                            cb(data);
+                        })
+                    }
+                }
+                )
+            } else {
+                fetch(url, {
+                    method: method,
+                    headers: headers,
+                    body: body,
+                    credentials: "include"
+                }).then(async response => {
+                    if (response.status == 500) {
+                        setTimeout(function () {
+                            if (retries <= 15) {
+                                request(url, method, headers, body, cb, retries + 1)
+                            }
+                        }, 1000)
+                    } else {
+                        response.json().then(data => {
+                            cb(data);
+                        }
+                        )
+                    }
+                })
+            }
+        }
+        const events = new EventSource("/events");
+
+        document.getElementById("queueButton").addEventListener("click", () => {
+            request("/api/toggleQueuing", "POST", { "Content-Type": "application/json" }, JSON.stringify({ password: document.getElementById("password").value }), resp => {
+                console.log(resp)
+            })
+        })
+
+        events.addEventListener("connected", (data) => {
+            const isConnected = data.data == "true";
+            if (isConnected){
+                document.getElementById("place").innerHTML = "You're being put into the queue";
+                document.getElementById("ETA").innerHTML = "";
+            }else{
+                document.getElementById("place").innerHTML = "Disconnected";
+                document.getElementById("ETA").innerHTML = "";
+                document.getElementById("queueButton").classList.remove("stop")
+                document.getElementById("queueButton").classList.add("start")
+                document.getElementById("queueButton").innerHTML = "Start queuing";
+            }
+        })
+
+        events.addEventListener("status", (data) => {
+            const connectionStatus = JSON.parse(data.data);
+            if (connectionStatus.canConnect == false){
+                document.getElementById("place").innerHTML = "Disconnected";
+                    document.getElementById("ETA").innerHTML = "";
+                    document.getElementById("queueButton").classList.remove("stop")
+                    document.getElementById("queueButton").classList.add("start")
+                    document.getElementById("queueButton").innerHTML = "Start queuing";
+            }else{
+                if (connectionStatus.inQueue == true) {
+                    document.getElementById("queueButton").classList.add("stop")
+                    document.getElementById("queueButton").classList.remove("start")
+                    document.getElementById("queueButton").innerHTML = "Stop queuing";
+
+                    document.getElementById("place").innerHTML = connectionStatus.position;
+                    document.getElementById("ETA").innerHTML = connectionStatus.estimation;
+                } else {
+                    if (connectionStatus.inGame == true) {
+                        document.getElementById("queueButton").setAttribute("disabled", "disabled");
+                        document.getElementById("place").innerHTML = "You're connected!";
+                        document.getElementById("ETA").innerHTML = "You're connected!";
+                    } else {
+                        document.getElementById("queueButton").classList.remove("stop")
+                        document.getElementById("queueButton").classList.add("start")
+                        document.getElementById("queueButton").innerHTML = "Start queuing";
+                    }
+                }
+            }
+        })
+
+        events.addEventListener("finished", (data) => {
+            const isFinished = data.data == "true";
+            document.getElementById("place").innerHTML = "You're connected!";
+            document.getElementById("ETA").innerHTML = "You're connected!";
+        })
+
+
+    </script>
+</body>
+
+</html>
